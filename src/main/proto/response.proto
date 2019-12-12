@@ -1,0 +1,11 @@
+syntax = "proto3";
+option java_package = "ysqlrelay.proto";
+
+import "common.proto";
+
+message SqlResponse {
+    string id = 1;
+    Session session = 2;
+    string content = 3;
+    Result result = 4;
+}
