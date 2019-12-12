@@ -1,0 +1,15 @@
+syntax = "proto3";
+option java_package = "sqlproxy.proto";
+
+import "common.proto";
+
+message SqlRequest {
+    enum Event {
+        UNKNOWN = 0;
+        CONNECT = 1;
+        CLOSE = 2;
+    }
+
+    Meta meta = 1;
+    Event event = 2;
+}
