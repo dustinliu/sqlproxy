@@ -1,4 +1,4 @@
-package ysqlrelay.server
+package sqlproxy.server
 
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource

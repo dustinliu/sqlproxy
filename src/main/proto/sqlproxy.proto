@@ -1,0 +1,46 @@
+syntax = "proto3";
+option java_package = "sqlproxy.grpc";
+
+service SQLProxy {
+    rpc Connect (ConnectRequest) returns (ConnectResponse) {}
+    rpc Close (CloseRequest) returns (CloseResponse) {}
+}
+
+
+message Meta {
+    string id = 1;
+    string session = 2;
+}
+
+message Status {
+    enum StatusCode {
+        SUCCESS = 0;
+        FAILED = 1;
+    }
+
+    StatusCode code = 1;
+    string message = 2;
+}
+
+enum Command {
+    UNKNOWN = 0;
+    CONNECT = 1;
+}
+
+message ConnectRequest {
+    Meta meta = 1;
+}
+
+message ConnectResponse {
+    Meta meta = 1;
+    Status status = 2;
+}
+
+message CloseRequest {
+    Meta meta = 1;
+}
+
+message CloseResponse {
+    Meta meta = 1;
+    Status status = 2;
+}
