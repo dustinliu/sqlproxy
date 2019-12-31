@@ -4,6 +4,7 @@ package sqlproxy.server
 import io.netty.bootstrap.ServerBootstrap
 import io.netty.channel.*
 import io.netty.channel.epoll.EpollEventLoopGroup
+import io.netty.channel.epoll.EpollServerSocketChannel
 import io.netty.channel.nio.NioEventLoopGroup
 import io.netty.channel.socket.SocketChannel
 import io.netty.channel.socket.nio.NioServerSocketChannel
@@ -42,7 +43,10 @@ class SQLRelay {
         try {
             val b = ServerBootstrap()
             b.group(bossGroup, workerGroup)
-            b.channel(NioServerSocketChannel::class.java)
+            b.channel(
+                if (SystemUtils.IS_OS_LINUX) EpollServerSocketChannel::class.java
+                else NioServerSocketChannel::class.java
+            )
             b.childHandler(ProtoServerInitializer())
             b.option<Int>(ChannelOption.SO_BACKLOG, 1024)
             b.childOption<Boolean>(ChannelOption.SO_KEEPALIVE, true)
