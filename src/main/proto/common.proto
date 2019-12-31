@@ -1,16 +1,6 @@
 syntax = "proto3";
 option java_package = "ysqlrelay.proto";
 
-message Status {
-    enum StatusCode {
-        SUCCESS = 0;
-        FAILED = 1;
-    }
-
-    StatusCode code = 1;
-    string message = 2;
-}
-
 
 message Meta {
     string id = 1;

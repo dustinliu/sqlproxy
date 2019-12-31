@@ -3,7 +3,28 @@ option java_package = "sqlproxy.proto";
 
 import "common.proto";
 
-message SqlResponse {
+
+message Status {
+    enum StatusCode {
+        SUCCESS = 0;
+        FAILED = 1;
+    }
+
+    StatusCode code = 1;
+    string message = 2;
+}
+
+
+message StmtResponse {
+    string id = 1;
+}
+
+message Response {
     Meta meta = 1;
-    Status status = 3;
+    Status status = 2;
+
+    oneof result {
+        StmtResponse stmt = 3;
+    }
+
 }

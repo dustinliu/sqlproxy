@@ -3,7 +3,7 @@ package sqlproxy.server
 import io.netty.channel.ChannelHandlerContext
 import io.netty.channel.ChannelInboundHandlerAdapter
 import mu.KotlinLogging
-import sqlproxy.proto.Request
+import sqlproxy.proto.RequestOuterClass.Request
 
 
 class NettyServerHandler: ChannelInboundHandlerAdapter() {
@@ -12,8 +12,10 @@ class NettyServerHandler: ChannelInboundHandlerAdapter() {
     }
 
     override fun channelRead(ctx: ChannelHandlerContext, msg: Any) {
-        val request = msg as Request.SqlRequest
-        ctx.writeAndFlush(handleRequest(request))
+        if (msg is Request) {
+            val responseHolder = ServiceProvider.getService(msg.event).handleRequest(msg)
+            responseHolder.writeAndFlush { ctx.writeAndFlush(it) }
+        }
         super.channelRead(ctx, msg)
     }
 

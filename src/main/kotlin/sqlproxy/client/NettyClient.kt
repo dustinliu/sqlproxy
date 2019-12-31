@@ -1,8 +1,8 @@
 package sqlproxy.client
 
 import mu.KotlinLogging
-import sqlproxy.proto.Request
-import sqlproxy.proto.Response
+import sqlproxy.proto.RequestOuterClass.Request
+import sqlproxy.proto.ResponseOuterClass.Response
 import ysqlrelay.proto.Common
 import java.net.InetSocketAddress
 import java.net.Socket
@@ -20,32 +20,32 @@ class ProtoBufClient {
     fun connect(host: String, port: Int) {
         val isa = InetSocketAddress(host, port)
         socket.connect(isa, 5000)
-        val request = Request.SqlRequest.newBuilder().apply {
+        val request = Request.newBuilder().apply {
             meta = Common.Meta.newBuilder().setId(UUID.randomUUID().toString()).build()
-            event = Request.SqlRequest.Event.CONNECT
+            event = Request.Event.CONNECT
         }.build()
 
         logger.trace { "request id: ${request.meta.id}" }
         logger.trace { "request session: ${request.meta.session}" }
         request.writeDelimitedTo(socket.getOutputStream())
 
-        val response = Response.SqlResponse.parseDelimitedFrom(socket.getInputStream())
+        val response = Response.parseDelimitedFrom(socket.getInputStream())
         sessionId = response.meta.session
         logger.trace { "response id: ${response.meta.id}" }
         logger.trace { "response session: ${response.meta.session}" }
     }
 
     fun close() {
-        val request = Request.SqlRequest.newBuilder().apply {
+        val request = Request.newBuilder().apply {
             meta = Common.Meta.newBuilder().setId(UUID.randomUUID().toString()).setSession(sessionId).build()
-            event = Request.SqlRequest.Event.CONNECT
+            event = Request.Event.CONNECT
         }.build()
 
         logger.trace { "request id: ${request.meta.id}" }
         logger.trace { "request session: ${request.meta.session}" }
         request.writeDelimitedTo(socket.getOutputStream())
 
-        val response = Response.SqlResponse.parseDelimitedFrom(socket.getInputStream())
+        val response = Response.parseDelimitedFrom(socket.getInputStream())
         sessionId = response.meta.session
         logger.trace { "response id: ${response.meta.id}" }
         logger.trace { "response session: ${response.meta.session}" }

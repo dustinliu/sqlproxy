@@ -2,7 +2,8 @@ package sqlproxy.server
 
 
 import io.netty.bootstrap.ServerBootstrap
-import io.netty.channel.*
+import io.netty.channel.ChannelInitializer
+import io.netty.channel.ChannelOption
 import io.netty.channel.epoll.EpollEventLoopGroup
 import io.netty.channel.epoll.EpollServerSocketChannel
 import io.netty.channel.nio.NioEventLoopGroup
@@ -14,12 +15,13 @@ import io.netty.handler.codec.protobuf.ProtobufVarint32FrameDecoder
 import io.netty.handler.codec.protobuf.ProtobufVarint32LengthFieldPrepender
 import mu.KotlinLogging
 import org.apache.commons.lang3.SystemUtils
-import sqlproxy.proto.Request
+import sqlproxy.proto.RequestOuterClass
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ThreadFactory
 import java.util.concurrent.atomic.AtomicInteger
 
 
-class SQLRelayThreadFactory(private val name: String) : ThreadFactory{
+class SQLProxyThreadFactory(private val name: String) : ThreadFactory{
     private var count = AtomicInteger()
 
     override fun newThread(r: Runnable): Thread {
@@ -27,46 +29,49 @@ class SQLRelayThreadFactory(private val name: String) : ThreadFactory{
     }
 }
 
-class SQLRelay {
+class SQLProxy(private val counter: CountDownLatch?=null) {
     companion object {
         val logger = KotlinLogging.logger {}
     }
 
-    fun main(args: Array<String>) {
-        val bossGroup =
-            if (SystemUtils.IS_OS_LINUX) EpollEventLoopGroup(0, SQLRelayThreadFactory("boss"))
-            else NioEventLoopGroup(0, SQLRelayThreadFactory("boss"))
-        val workerGroup =
-            if (SystemUtils.IS_OS_LINUX) EpollEventLoopGroup(200, SQLRelayThreadFactory("worker"))
-            else NioEventLoopGroup(200, SQLRelayThreadFactory("worker"))
+    private val bossGroup =
+        if (SystemUtils.IS_OS_LINUX) EpollEventLoopGroup(0, SQLProxyThreadFactory("boss"))
+        else NioEventLoopGroup(0, SQLProxyThreadFactory("boss"))
+    private val workerGroup =
+        if (SystemUtils.IS_OS_LINUX) EpollEventLoopGroup(200, SQLProxyThreadFactory("worker"))
+        else NioEventLoopGroup(200, SQLProxyThreadFactory("worker"))
 
-        try {
-            val b = ServerBootstrap()
-            b.group(bossGroup, workerGroup)
-            b.channel(
-                if (SystemUtils.IS_OS_LINUX) EpollServerSocketChannel::class.java
-                else NioServerSocketChannel::class.java
-            )
-            b.childHandler(ProtoServerInitializer())
-            b.option<Int>(ChannelOption.SO_BACKLOG, 1024)
-            b.childOption<Boolean>(ChannelOption.SO_KEEPALIVE, true)
+    fun start() {
+        val b = ServerBootstrap()
+        b.group(bossGroup, workerGroup)
+        b.channel(
+            if (SystemUtils.IS_OS_LINUX) EpollServerSocketChannel::class.java
+            else NioServerSocketChannel::class.java
+        )
+        b.childHandler(ProtoServerInitializer())
+        b.option<Int>(ChannelOption.SO_BACKLOG, 1024)
+        b.childOption<Boolean>(ChannelOption.SO_KEEPALIVE, true)
 
-            val f = b.bind(8888).sync()
-            logger.info("sqlproxy started")
-            f.channel().closeFuture().sync()
-        } finally {
-            workerGroup.shutdownGracefully()
-            bossGroup.shutdownGracefully()
-            logger.info("sqlproxy shtdown")
-        }
+        val f = b.bind(8888).sync()
+        counter?.countDown()
+        logger.info("sqlproxy started")
+        f.channel().closeFuture().sync()
     }
+
+    fun stop() {
+        workerGroup.shutdownGracefully()
+        bossGroup.shutdownGracefully()
+        logger.info("sqlproxy shtdown")
+    }
+
+    internal fun getSessions() = SessionFactory.getSessions()
 }
 
 class ProtoServerInitializer : ChannelInitializer<SocketChannel>() {
     override fun initChannel(ch: SocketChannel) {
         val pipeline = ch.pipeline()
         pipeline.addLast(ProtobufVarint32FrameDecoder())
-        pipeline.addLast(ProtobufDecoder(Request.SqlRequest.getDefaultInstance()))
+        pipeline.addLast(ProtobufDecoder(RequestOuterClass.Request.getDefaultInstance()))
         pipeline.addLast(ProtobufVarint32LengthFieldPrepender())
         pipeline.addLast(ProtobufEncoder())
         pipeline.addLast(NettyServerHandler())
@@ -74,6 +79,7 @@ class ProtoServerInitializer : ChannelInitializer<SocketChannel>() {
 }
 
 
-fun main(args: Array<String>) {
-    SQLRelay().main(args)
+fun main() {
+    val proxy = SQLProxy()
+    Thread { proxy.start() }.start()
 }
