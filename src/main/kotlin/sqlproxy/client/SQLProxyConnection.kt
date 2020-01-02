@@ -1,10 +1,9 @@
 package sqlproxy.client
 
 import mu.KotlinLogging
+import sqlproxy.proto.Common
 import sqlproxy.proto.RequestOuterClass
 import sqlproxy.proto.ResponseOuterClass
-import ysqlrelay.proto.Common
-import java.lang.RuntimeException
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.sql.*

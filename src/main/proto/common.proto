@@ -1,8 +1,9 @@
 syntax = "proto3";
-option java_package = "ysqlrelay.proto";
+option java_package = "sqlproxy.proto";
 
 
 message Meta {
     string id = 1;
     string session = 2;
+    string stmt = 3;
 }

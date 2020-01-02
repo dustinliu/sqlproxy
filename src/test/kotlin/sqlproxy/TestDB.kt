@@ -1,4 +1,4 @@
-package sqlproxy.server
+package sqlproxy
 
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
@@ -9,12 +9,8 @@ object DataSource {
     private val config = HikariConfig()
     val ds by lazy {
         with(config) {
+            jdbcUrl = "jdbc:sqlite:sqlproxy.db"
             jdbcUrl = "jdbc:sqlite::memory:"
-//            username = "database_usernam"
-//            password = "database_password"
-//            addDataSourceProperty( "cachePrepStmts" , "true" )
-//            addDataSourceProperty( "prepStmtCacheSize" , "250" )
-//            addDataSourceProperty( "prepStmtCacheSqlLimit" , "2048" )
         }
         HikariDataSource(config)
     }

@@ -2,7 +2,7 @@ syntax = "proto3";
 option java_package = "sqlproxy.proto";
 
 import "common.proto";
-
+import "google/protobuf/any.proto";
 
 message Status {
     enum StatusCode {
@@ -19,12 +19,30 @@ message StmtResponse {
     string id = 1;
 }
 
+message ColumnResponse {
+    int32 pos = 1;
+    string name = 2;
+    int32 type = 3;
+    repeated google.protobuf.Any value = 4;
+}
+
+message QueryResponse {
+    uint32 numOfColumn = 1;
+    repeated ColumnResponse columnMeta= 2;
+}
+
+message RowResponse {
+    Meta meta = 1;
+    repeated ColumnResponse column = 2;
+}
+
 message Response {
     Meta meta = 1;
     Status status = 2;
 
     oneof result {
         StmtResponse stmt = 3;
+        int32 updateCount = 4;
+        QueryResponse queryResponse = 5;
     }
-
 }

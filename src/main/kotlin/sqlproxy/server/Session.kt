@@ -5,9 +5,9 @@ import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 
 class Session {
-    enum class Status(val code: Int) {
-        CONNECTED(1),
-        CLOSED(2)
+    enum class Status {
+        CONNECTED,
+        CLOSED
     }
 
 
@@ -20,13 +20,14 @@ class Session {
 
     fun createStmt(): String {
         val id = UUID.randomUUID().toString()
-        stmtMap.put(id, connection.createStatement())
+        stmtMap[id] = connection.createStatement()
         return id
     }
 
     fun getStmt(id: String) = stmtMap.getValue(id)
 
     fun close() {
+        stmtMap.forEach { (_, stmt) -> stmt.close() }
         connection.close()
         status = Status.CLOSED
     }
@@ -44,6 +45,13 @@ object SessionFactory {
         val session = getSession(session_id)
         session.close()
         session_pool.remove(session_id)
+    }
+
+    fun resetAll() {
+        for ((k, v) in session_pool) {
+            v.close()
+        }
+        session_pool.clear()
     }
 
     internal fun getSessions() = session_pool

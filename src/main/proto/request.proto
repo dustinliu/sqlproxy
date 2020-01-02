@@ -10,8 +10,12 @@ message Request {
         CONNECT = 1;
         CLOSE = 2;
         CREATE_STMT = 3;
+        SQL_UPDATE = 4;
+        SQL_QUERY = 5;
     }
 
     Meta meta = 1;
     Event event = 2;
+
+    string sql = 3;
 }

@@ -29,7 +29,7 @@ class SQLProxyThreadFactory(private val name: String) : ThreadFactory{
     }
 }
 
-class SQLProxy(private val counter: CountDownLatch?=null) {
+class SQLProxy() {
     companion object {
         val logger = KotlinLogging.logger {}
     }
@@ -40,6 +40,9 @@ class SQLProxy(private val counter: CountDownLatch?=null) {
     private val workerGroup =
         if (SystemUtils.IS_OS_LINUX) EpollEventLoopGroup(200, SQLProxyThreadFactory("worker"))
         else NioEventLoopGroup(200, SQLProxyThreadFactory("worker"))
+
+    private val startCountDown = CountDownLatch(1)
+    private val stopCountDown = CountDownLatch(1)
 
     fun start() {
         val b = ServerBootstrap()
@@ -53,15 +56,28 @@ class SQLProxy(private val counter: CountDownLatch?=null) {
         b.childOption<Boolean>(ChannelOption.SO_KEEPALIVE, true)
 
         val f = b.bind(8888).sync()
-        counter?.countDown()
+        startCountDown.countDown()
         logger.info("sqlproxy started")
         f.channel().closeFuture().sync()
+    }
+
+    fun awaitStart() {
+        startCountDown.await()
     }
 
     fun stop() {
         workerGroup.shutdownGracefully()
         bossGroup.shutdownGracefully()
         logger.info("sqlproxy shtdown")
+        stopCountDown.countDown()
+    }
+
+    fun awaitStop() {
+        stopCountDown.await()
+    }
+
+    fun resetSessions() {
+        SessionFactory.resetAll()
     }
 
     internal fun getSessions() = SessionFactory.getSessions()
