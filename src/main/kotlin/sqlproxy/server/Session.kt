@@ -1,7 +1,7 @@
 package sqlproxy.server
 
 import java.sql.Statement
-import java.util.*
+import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
 class Session {
@@ -10,12 +10,11 @@ class Session {
         CLOSED
     }
 
-
     var status: Status = Status.CONNECTED
     val id = UUID.randomUUID().toString()
     val created = System.currentTimeMillis()
 
-    private val connection = DataSource.getConnection()
+    private val connection = SQLProxyDataSource.getConnection()
     private val stmtMap = mutableMapOf<String, Statement>()
 
     fun createStmt(): String {
@@ -32,7 +31,6 @@ class Session {
         status = Status.CLOSED
     }
 }
-
 
 object SessionFactory {
     private val session_pool = ConcurrentHashMap<String, Session>()

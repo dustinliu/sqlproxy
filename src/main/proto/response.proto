@@ -23,7 +23,7 @@ message ColumnResponse {
     int32 pos = 1;
     string name = 2;
     int32 type = 3;
-    repeated google.protobuf.Any value = 4;
+    google.protobuf.Any value = 4;
 }
 
 message QueryResponse {
@@ -33,7 +33,8 @@ message QueryResponse {
 
 message RowResponse {
     Meta meta = 1;
-    repeated ColumnResponse column = 2;
+    bool hasData = 2;
+    repeated ColumnResponse column = 3;
 }
 
 message Response {

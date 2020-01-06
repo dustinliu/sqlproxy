@@ -6,6 +6,7 @@ import sqlproxy.proto.ResponseOuterClass.Response
 import sqlproxy.protocol.newRequestBuilder
 import java.net.InetSocketAddress
 import java.net.Socket
+import kotlin.system.measureTimeMillis
 
 
 data class Result(val request: Request, val response: Response)
@@ -15,10 +16,11 @@ class ProxyClient {
         private val logger = KotlinLogging.logger {}
     }
 
-    private val socket = Socket()
+    private lateinit var socket: Socket
     private var sessionId: String? = null
 
     fun connect(host: String, port: Int): Result {
+        socket = Socket()
         val isa = InetSocketAddress(host, port)
         socket.connect(isa, 5000)
 
@@ -69,6 +71,11 @@ class ProxyClient {
 
 fun main() {
     val client = ProxyClient()
-    client.connect("localhost", 8888)
-    client.close()
+    repeat(1000) {
+        val t = measureTimeMillis {
+            client.connect("localhost", 8888)
+            client.close()
+        }
+        println(t)
+    }
 }

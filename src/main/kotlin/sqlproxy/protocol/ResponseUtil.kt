@@ -1,11 +1,19 @@
 package sqlproxy.protocol
 
 import com.google.protobuf.MessageLite
-import kotlinx.coroutines.*
-import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.InternalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import mu.KotlinLogging
 import sqlproxy.proto.Common
-import sqlproxy.proto.ResponseOuterClass.*
+import sqlproxy.proto.ResponseOuterClass.ColumnResponse
+import sqlproxy.proto.ResponseOuterClass.QueryResponse
+import sqlproxy.proto.ResponseOuterClass.Response
+import sqlproxy.proto.ResponseOuterClass.Status
 import java.sql.ResultSetMetaData
 
 fun newResponseBuilder(id: String, sessionId: String?, stmtId: String?): Response.Builder {
@@ -17,19 +25,27 @@ fun newResponseBuilder(id: String, sessionId: String?, stmtId: String?): Respons
     return Response.newBuilder().setMeta(meta)
 }
 
-
-fun newSuccessResponseBuilder(id: String, sessionId: String?=null, stmtId: String?=null): Response.Builder {
-    val status = Status.newBuilder() .setCode(Status.StatusCode.SUCCESS).build()
+fun newSuccessResponseBuilder(id: String,
+                              sessionId: String? = null,
+                              stmtId: String? = null): Response.Builder {
+    val status = Status.newBuilder().setCode(Status.StatusCode.SUCCESS).build()
     return newResponseBuilder(id, sessionId, stmtId).setStatus(status)
 }
 
-fun newFailResponseBuilder(id: String, sessionId: String?=null, stmtId: String?=null, msg: String?=null): Response.Builder {
+fun newFailResponseBuilder(
+        id: String,
+        sessionId: String? = null,
+        stmtId: String? = null,
+        msg: String? = null
+): Response.Builder {
     val status = Status.newBuilder()
             .setCode(Status.StatusCode.FAILED)
             .also { msg?.run { it.setMessage(msg) } }
             .build()
-    return newResponseBuilder(id, sessionId, stmtId).setStatus(status)
+
+    return newResponseBuilder (id, sessionId, stmtId).setStatus(status)
 }
+
 
 fun makeQueryResponse(meta: ResultSetMetaData): QueryResponse {
     val columnCount = meta.columnCount
@@ -45,28 +61,26 @@ fun makeQueryResponse(meta: ResultSetMetaData): QueryResponse {
     return queryBuilder.build()
 }
 
-class ResponseHolder(private val channel: Channel<MessageLite>) {
+
+
+interface ResponseHolder {
+    fun write(writeFun: (Any) -> Unit)
+}
+
+
+class FlowResponseHolder(private val flow: Flow<MessageLite>) : ResponseHolder {
     companion object {
         private val logger = KotlinLogging.logger {}
     }
 
-    fun write(writeFun: (Any) -> Unit)= runBlocking {
-        logger.trace { "begin to write message"}
-//        val job = GlobalScope.launch {
-        val job = launch {
-            logger.trace { "running in [thread ${Thread.currentThread().name}]"}
-            for (msg in channel) {
-                if (msg is Response) {
-                    logger.trace { "msg id: ${msg.meta.id}" }
-                    logger.trace { "msg session: ${msg.meta.session}" }
-                    logger.trace { "status code: ${msg.status.code}" }
-                    logger.trace { "status message: ${msg.status.message}" }
-                }
-                logger.trace { "write msg, ${msg.javaClass}" }
-                writeFun(msg)
-            }
+    @InternalCoroutinesApi
+    override fun write(writeFun: (Any) -> Unit) {
+        val job = GlobalScope.launch(Dispatchers.Unconfined) {
+            logger.trace { "thread [${Thread.currentThread().name}]" }
+            logger.trace { "begin to collect msg" }
+            flow.collect { msg -> writeFun(msg) }
+            logger.trace { "collect msg done" }
         }
-        job.join()
-        logger.trace { "all message written"}
+        runBlocking { job.join() }
     }
 }
