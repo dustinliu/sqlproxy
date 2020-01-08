@@ -1,8 +1,14 @@
 package sqlproxy.server
 
+import com.google.protobuf.Int32Value
+import com.google.protobuf.Int64Value
+import com.google.protobuf.StringValue
+import com.zaxxer.hikari.HikariConfig
+import com.zaxxer.hikari.HikariDataSource
 import org.jetbrains.exposed.dao.IntIdTable
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
+import org.jetbrains.exposed.sql.insert
 import org.jetbrains.exposed.sql.select
 import org.jetbrains.exposed.sql.transactions.TransactionManager
 import org.jetbrains.exposed.sql.transactions.transaction
@@ -13,9 +19,17 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.kodein.di.Kodein
+import org.kodein.di.generic.bind
+import org.kodein.di.generic.provider
 import sqlproxy.client.ProxyClient
+import sqlproxy.proto.ResponseOuterClass.Response
+import sqlproxy.proto.ResponseOuterClass.RowResponse
 import sqlproxy.proto.ResponseOuterClass.Status
+import java.nio.file.Paths
 import java.sql.Connection
+import java.sql.JDBCType
+import javax.sql.DataSource
 import kotlin.test.assertNotNull
 
 object TestTable1 : IntIdTable("test_table1") {
@@ -24,13 +38,26 @@ object TestTable1 : IntIdTable("test_table1") {
 
 internal class ServerTest {
     private val proxy = SQLProxy()
+    private val dataSource: DataSource by lazy {
+        val config = HikariConfig()
+        val dbFullName = Paths.get(System.getProperty("java.io.tmpdir"), "test.db").toString()
+        with(config) {
+            jdbcUrl = "jdbc:sqlite:$dbFullName"
+        }
+        HikariDataSource(config)
+    }
 
     @BeforeAll
     fun init() {
         Thread { proxy.start() }.start()
         proxy.awaitStart()
 
-        Database.connect(SQLProxyDataSource.ds)
+        kodein = Kodein {
+            extend(defaultKodein)
+            bind<DataSource>(overrides = true) with provider { dataSource }
+        }
+
+        Database.connect(DataSourceFactory.dataSource)
         TransactionManager.manager.defaultIsolationLevel = Connection.TRANSACTION_SERIALIZABLE
     }
 
@@ -41,7 +68,10 @@ internal class ServerTest {
 
     @BeforeEach
     fun setup() {
-        transaction { SchemaUtils.create(TestTable1) }
+        transaction {
+            SchemaUtils.drop(TestTable1)
+            SchemaUtils.create(TestTable1)
+        }
     }
 
     @AfterEach
@@ -90,5 +120,58 @@ internal class ServerTest {
             transaction { TestTable1.select { TestTable1.id eq 1 }.firstOrNull() }
         }
         assertEquals("nnn", result1?.get(TestTable1.name))
+    }
+
+    @Test
+    fun `sql query`() {
+        transaction {
+            TestTable1.insert { it[name] = "1" }
+            TestTable1.insert { it[name] = "2" }
+            TestTable1.insert { it[name] = "3" }
+        }
+
+        val client = ProxyClient().apply { connect("localhost", 8888) }
+        val stmtId = client.createStmt().response.stmt.id
+        val result = client.execQuery(stmtId, "select name, id from test_table1 order by id")
+        val response = result.first().response as Response
+        assertEquals(Status.StatusCode.SUCCESS, response.status.code, response.status.message)
+        assertEquals(2, response.queryResponse.numOfColumn)
+
+        var columnMeta = response.queryResponse.columnMetaList[0]
+        assertEquals(1, columnMeta.pos)
+        assertEquals("name", columnMeta.name)
+        assertEquals(JDBCType.VARCHAR, JDBCType.valueOf(columnMeta.type))
+
+        columnMeta = response.queryResponse.columnMetaList[1]
+        assertEquals(2, columnMeta.pos)
+        assertEquals("id", columnMeta.name)
+        assertEquals(JDBCType.INTEGER, JDBCType.valueOf(columnMeta.type))
+
+        var rowResponse = result[1].response as RowResponse
+        assertEquals(true, rowResponse.hasData)
+        var columns = rowResponse.columnList
+        assertEquals(1, columns[0].pos)
+        assertEquals("1", columns[0].value.unpack(StringValue::class.java).value)
+        assertEquals(2, columns[1].pos)
+        assertEquals(1, columns[1].value.unpack(Int32Value::class.java).value)
+
+        rowResponse = result[2].response as RowResponse
+        assertEquals(true, rowResponse.hasData)
+        columns = rowResponse.columnList
+        assertEquals(1, columns[0].pos)
+        assertEquals("2", columns[0].value.unpack(StringValue::class.java).value)
+        assertEquals(2, columns[1].pos)
+        assertEquals(2, columns[1].value.unpack(Int32Value::class.java).value)
+
+        rowResponse = result[3].response as RowResponse
+        assertEquals(true, rowResponse.hasData)
+        columns = rowResponse.columnList
+        assertEquals(1, columns[0].pos)
+        assertEquals("3", columns[0].value.unpack(StringValue::class.java).value)
+        assertEquals(2, columns[1].pos)
+        assertEquals(3, columns[1].value.unpack(Int32Value::class.java).value)
+
+        rowResponse = result[4].response as RowResponse
+        assertEquals(false, rowResponse.hasData)
     }
 }

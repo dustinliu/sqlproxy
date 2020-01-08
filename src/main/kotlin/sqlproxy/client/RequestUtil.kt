@@ -1,4 +1,4 @@
-package sqlproxy.protocol
+package sqlproxy.client
 
 import sqlproxy.proto.Common
 import sqlproxy.proto.RequestOuterClass.Request

@@ -11,6 +11,9 @@ repositories {
     mavenCentral()
 }
 
+group = "sqlproxy"
+version = "0.0.1"
+
 dependencies {
     implementation platform('org.jetbrains.kotlin:kotlin-bom')
     implementation 'org.jetbrains.kotlin:kotlin-stdlib-jdk8'
@@ -23,15 +26,21 @@ dependencies {
     implementation 'io.github.microutils:kotlin-logging:1.7.8'
     implementation 'com.zaxxer:HikariCP:3.4.1'
     implementation 'io.github.config4k:config4k:0.3.4'
+//    implementation 'com.google.inject:guice:4.2.2'
+    implementation 'org.kodein.di:kodein-di-generic-jvm:6.5.1'
     runtimeOnly 'ch.qos.logback:logback-core:1.2.3'
     runtimeOnly 'ch.qos.logback:logback-classic:1.2.3'
     testImplementation 'org.jetbrains.kotlin:kotlin-test'
-    runtimeOnly 'org.xerial:sqlite-jdbc:3.30.1'
     testImplementation "org.junit.jupiter:junit-jupiter:5.5.2"
     testImplementation 'io.mockk:mockk:1.9.3'
     testImplementation 'org.jetbrains.exposed:exposed:0.17.7'
+    testRuntime 'org.xerial:sqlite-jdbc:3.30.1'
+}
 
-
+tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).all {
+    kotlinOptions {
+        jvmTarget = "1.8"
+    }
 }
 
 application {
@@ -70,7 +79,7 @@ detekt {
 //    baseline = file("$projectDir/config/baseline.xml")
 
     reports {
-        html.enabled = false
+        html.enabled = true
         xml.enabled = false
         txt.enabled = true
     }

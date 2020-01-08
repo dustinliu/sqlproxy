@@ -1,6 +1,5 @@
 package sqlproxy.server
 
-
 import io.netty.bootstrap.ServerBootstrap
 import io.netty.channel.ChannelInitializer
 import io.netty.channel.ChannelOption
@@ -20,7 +19,6 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ThreadFactory
 import java.util.concurrent.atomic.AtomicInteger
 
-
 class SQLProxyThreadFactory(private val name: String) : ThreadFactory{
     private var count = AtomicInteger()
 
@@ -29,7 +27,7 @@ class SQLProxyThreadFactory(private val name: String) : ThreadFactory{
     }
 }
 
-class SQLProxy() {
+class SQLProxy {
     companion object {
         val logger = KotlinLogging.logger {}
     }
