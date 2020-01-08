@@ -10,7 +10,7 @@ build:
 config:
   validation: true
   # when writing own rules with new properties, exclude the property path e.g.: "my_rule_set,.*>.*>[my_property]"
-  excludes: ""
+  excludes:
 
 processors:
   active: true
@@ -434,6 +434,7 @@ potential-bugs:
     active: true
 
 style:
+  excludes: "**/internal/**"
   active: true
   CollapsibleIfStatements:
     active: false

@@ -1,8 +1,12 @@
 package sqlproxy.server
 
+import org.kodein.di.generic.instance
+import sqlproxy.server.DataSourceFactory.dataSource
+import java.sql.Connection
 import java.sql.Statement
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import javax.sql.DataSource
 
 class Session {
     enum class Status {
@@ -14,7 +18,7 @@ class Session {
     val id = UUID.randomUUID().toString()
     val created = System.currentTimeMillis()
 
-    private val connection = SQLProxyDataSource.getConnection()
+    private val connection: Connection = DataSourceFactory.dataSource.connection
     private val stmtMap = mutableMapOf<String, Statement>()
 
     fun createStmt(): String {

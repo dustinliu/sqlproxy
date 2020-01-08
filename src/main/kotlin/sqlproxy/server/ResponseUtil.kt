@@ -1,6 +1,9 @@
-package sqlproxy.protocol
+package sqlproxy.server
 
+import com.google.protobuf.Message
 import com.google.protobuf.MessageLite
+import com.google.protobuf.StringValue
+import com.google.protobuf.UInt32Value
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.InternalCoroutinesApi
@@ -10,10 +13,14 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import mu.KotlinLogging
 import sqlproxy.proto.Common
+import sqlproxy.proto.ResponseOuterClass
 import sqlproxy.proto.ResponseOuterClass.ColumnResponse
 import sqlproxy.proto.ResponseOuterClass.QueryResponse
 import sqlproxy.proto.ResponseOuterClass.Response
+import sqlproxy.proto.ResponseOuterClass.RowResponse
 import sqlproxy.proto.ResponseOuterClass.Status
+import java.sql.JDBCType
+import java.sql.ResultSet
 import java.sql.ResultSetMetaData
 
 fun newResponseBuilder(id: String, sessionId: String?, stmtId: String?): Response.Builder {
@@ -43,14 +50,13 @@ fun newFailResponseBuilder(
             .also { msg?.run { it.setMessage(msg) } }
             .build()
 
-    return newResponseBuilder (id, sessionId, stmtId).setStatus(status)
+    return newResponseBuilder(id, sessionId, stmtId).setStatus(status)
 }
-
 
 fun makeQueryResponse(meta: ResultSetMetaData): QueryResponse {
     val columnCount = meta.columnCount
     val queryBuilder = QueryResponse.newBuilder().setNumOfColumn(columnCount)
-    for (i in 1 until columnCount) {
+    for (i in 1 until columnCount+1) {
         val column = ColumnResponse.newBuilder()
                 .setPos(i)
                 .setName(meta.getColumnName(i))
@@ -61,25 +67,31 @@ fun makeQueryResponse(meta: ResultSetMetaData): QueryResponse {
     return queryBuilder.build()
 }
 
-
+fun makeRowResponseBuilder(resultSet: ResultSet): RowResponse.Builder {
+    val rowBuilder = ResponseOuterClass.RowResponse.newBuilder()
+    val resultMeta = resultSet.metaData
+    for (i in 1 until resultMeta.columnCount + 1) {
+        val value: Message = when (val type = JDBCType.valueOf(resultMeta.getColumnType(i))) {
+            JDBCType.CHAR, JDBCType.VARCHAR -> StringValue.of(resultSet.getString(i))
+            JDBCType.INTEGER -> UInt32Value.of(resultSet.getInt(i))
+            else -> throw IllegalArgumentException(
+                    "unsupport value type, [${type.getName()}]")
+        }
+        val column = ColumnResponse.newBuilder().setPos(i).setValue(ProtobufAny.pack(value))
+        rowBuilder.addColumn(column)
+    }
+    return rowBuilder
+}
 
 interface ResponseHolder {
     fun write(writeFun: (Any) -> Unit)
 }
 
-
 class FlowResponseHolder(private val flow: Flow<MessageLite>) : ResponseHolder {
-    companion object {
-        private val logger = KotlinLogging.logger {}
-    }
-
     @InternalCoroutinesApi
     override fun write(writeFun: (Any) -> Unit) {
         val job = GlobalScope.launch(Dispatchers.Unconfined) {
-            logger.trace { "thread [${Thread.currentThread().name}]" }
-            logger.trace { "begin to collect msg" }
             flow.collect { msg -> writeFun(msg) }
-            logger.trace { "collect msg done" }
         }
         runBlocking { job.join() }
     }

@@ -1,17 +1,21 @@
 package sqlproxy.server
 
+import com.google.protobuf.Message
 import com.google.protobuf.MessageLite
+import com.google.protobuf.StringValue
+import com.google.protobuf.UInt32Value
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import sqlproxy.proto.Common.Meta
 import sqlproxy.proto.RequestOuterClass.Request
 import sqlproxy.proto.ResponseOuterClass
+import sqlproxy.proto.ResponseOuterClass.ColumnResponse
+import sqlproxy.proto.ResponseOuterClass.RowResponse
 import sqlproxy.proto.ResponseOuterClass.StmtResponse
-import sqlproxy.protocol.FlowResponseHolder
-import sqlproxy.protocol.ResponseHolder
-import sqlproxy.protocol.makeQueryResponse
-import sqlproxy.protocol.newFailResponseBuilder
-import sqlproxy.protocol.newSuccessResponseBuilder
 import java.sql.JDBCType
+import java.sql.ResultSet
+
+typealias ProtobufAny = com.google.protobuf.Any
 
 object ServiceProvider {
     fun getService(event: Request.Event) = when (event) {
@@ -88,15 +92,10 @@ class SQLQueryService : AbstractFlowService() {
         builder.queryResponse = makeQueryResponse(resultMeta)
         emit(builder.build())
 
+        val meta = Meta.newBuilder().setId(request.meta.id).setSession(request.meta.session)
         while (resultSet.next()) {
-            val rowBuilder = ResponseOuterClass.RowResponse.newBuilder()
-            for (i in 1 until resultMeta.columnCount + 1) {
-                val value = when (val type = JDBCType.valueOf(resultMeta.getColumnType(i))) {
-                    JDBCType.CHAR, JDBCType.VARCHAR -> resultSet.getString(i)
-                    else -> throw IllegalArgumentException(
-                            "unsupport value type, [${type.getName()}]")
-                }
-            }
+            emit(makeRowResponseBuilder(resultSet).setMeta(meta).setHasData(true).build())
         }
+        emit(RowResponse.newBuilder().setMeta(meta).setHasData(false).build())
     }
 }

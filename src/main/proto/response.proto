@@ -3,6 +3,7 @@ option java_package = "sqlproxy.proto";
 
 import "common.proto";
 import "google/protobuf/any.proto";
+import "google/protobuf/wrappers.proto";
 
 message Status {
     enum StatusCode {
@@ -13,7 +14,6 @@ message Status {
     StatusCode code = 1;
     string message = 2;
 }
-
 
 message StmtResponse {
     string id = 1;
