@@ -16,7 +16,7 @@ message Status {
 }
 
 message StmtResponse {
-    string id = 1;
+    uint32 id = 1;
 }
 
 message ColumnResponse {
@@ -27,8 +27,14 @@ message ColumnResponse {
 }
 
 message QueryResponse {
-    uint32 numOfColumn = 1;
-    repeated ColumnResponse columnMeta= 2;
+    string stmt = 1;
+    uint32 numOfColumn = 2;
+    repeated ColumnResponse columnMeta= 3;
+}
+
+message UpdateResponse {
+    uint32 stmt = 1;
+    int32 updateCount = 2;
 }
 
 message RowResponse {
@@ -43,7 +49,7 @@ message Response {
 
     oneof result {
         StmtResponse stmt = 3;
-        int32 updateCount = 4;
+        UpdateResponse updateResponse = 4;
         QueryResponse queryResponse = 5;
     }
 }

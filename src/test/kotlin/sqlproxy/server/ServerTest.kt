@@ -26,6 +26,7 @@ import java.nio.file.Paths
 import java.sql.Connection
 import java.sql.JDBCType
 import javax.sql.DataSource
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 
 object TestTable1 : IntIdTable("test_table1") {
@@ -82,7 +83,7 @@ internal class ServerTest {
         val result1 = client.connect("localhost", 8888)
         val sessionId = result1.response.meta.session
         assertEquals(Status.StatusCode.SUCCESS, result1.response.status.code)
-        assertFalse(sessionId.isNullOrEmpty())
+        assertNotEquals(0, sessionId)
         assertEquals(result1.request.meta.id, result1.response.meta.id)
         assertEquals(1, proxy.getSessions().size)
 
@@ -100,7 +101,7 @@ internal class ServerTest {
         val result = client.createStmt()
         assertEquals(Status.StatusCode.SUCCESS, result.response.status.code)
         assertNotNull(result.response.stmt)
-        assertFalse(result.response.stmt.id.isNullOrEmpty())
+        assertNotEquals(0, result.response.stmt.id)
         client.close()
     }
 
@@ -111,7 +112,7 @@ internal class ServerTest {
         val stmtId = client.createStmt().response.stmt.id
         val result = client.execUpdate(stmtId, "insert into test_table1 (name) values ('nnn')")
         assertEquals(Status.StatusCode.SUCCESS, result.response.status.code, result.response.status.message)
-        assertEquals(1, result.response.updateCount)
+        assertEquals(1, result.response.updateResponse.updateCount)
         val result1 by lazy {
             transaction { TestTable1.select { TestTable1.id eq 1 }.firstOrNull() }
         }

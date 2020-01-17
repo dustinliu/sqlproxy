@@ -8,6 +8,6 @@ internal class SessionFactoryTest {
     @Test
     fun `get nonexisting session`() {
         assertThrows(NoSuchElementException::class.java)
-            {SessionFactory.getSession("fdfdf")}
+            {SessionFactory.getSession(343)}
     }
 }

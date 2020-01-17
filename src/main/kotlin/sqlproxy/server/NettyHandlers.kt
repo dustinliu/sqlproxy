@@ -4,6 +4,7 @@ import io.netty.channel.ChannelHandlerContext
 import io.netty.channel.ChannelInboundHandlerAdapter
 import mu.KotlinLogging
 import sqlproxy.proto.RequestOuterClass.Request
+import sqlproxy.protocol.ProxyRequest
 
 
 class NettyServerHandler: ChannelInboundHandlerAdapter() {
@@ -13,7 +14,7 @@ class NettyServerHandler: ChannelInboundHandlerAdapter() {
 
     override fun channelRead(ctx: ChannelHandlerContext, msg: Any) {
         if (msg is Request) {
-            val responseHolder = ServiceProvider.getService(msg.event).handleRequest(msg)
+            val responseHolder = ServiceProvider.getService(msg.event).handleRequest(ProxyRequest(msg))
             responseHolder.write { ctx.write(it) }
             ctx.flush()
             logger.trace { "netty channel flush done"}

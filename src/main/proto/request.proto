@@ -3,6 +3,14 @@ option java_package = "sqlproxy.proto";
 
 import "common.proto";
 
+message SQLRequest {
+    Statement stmt = 1;
+    string sql = 2;
+}
+
+message StmtRequest {
+    Statement stmt = 1;
+}
 
 message Request {
     enum Event {
@@ -12,10 +20,13 @@ message Request {
         CREATE_STMT = 3;
         SQL_UPDATE = 4;
         SQL_QUERY = 5;
+        STMT_CLOSE = 6;
     }
 
     Meta meta = 1;
     Event event = 2;
 
-    string sql = 3;
+    oneof query {
+        SQLRequest sqlRequest = 3;
+    }
 }

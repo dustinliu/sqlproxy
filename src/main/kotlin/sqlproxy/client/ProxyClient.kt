@@ -2,14 +2,19 @@ package sqlproxy.client
 
 import com.google.protobuf.MessageLite
 import mu.KotlinLogging
+import sqlproxy.proto.Common.Statement
 import sqlproxy.proto.RequestOuterClass.Request
-import sqlproxy.proto.ResponseOuterClass.Response
 import sqlproxy.proto.RequestOuterClass.Request.Event.CLOSE
 import sqlproxy.proto.RequestOuterClass.Request.Event.CONNECT
 import sqlproxy.proto.RequestOuterClass.Request.Event.CREATE_STMT
 import sqlproxy.proto.RequestOuterClass.Request.Event.SQL_QUERY
 import sqlproxy.proto.RequestOuterClass.Request.Event.SQL_UPDATE
+import sqlproxy.proto.RequestOuterClass.SQLRequest
+import sqlproxy.proto.ResponseOuterClass.Response
 import sqlproxy.proto.ResponseOuterClass.RowResponse
+import sqlproxy.protocol.ProxyRequest
+import sqlproxy.protocol.ProxyRequest.Companion
+import sqlproxy.protocol.ProxySQLRequest
 import java.net.InetSocketAddress
 import java.net.Socket
 import kotlin.system.measureTimeMillis
@@ -23,14 +28,14 @@ class ProxyClient {
     }
 
     private lateinit var socket: Socket
-    private var sessionId: String? = null
+    private var sessionId: Long? = null
 
     fun connect(host: String, port: Int): Result<Response> {
         socket = Socket()
         val isa = InetSocketAddress(host, port)
         socket.connect(isa, 5000)
 
-        val request = newRequestBuilder(CONNECT).build()
+        val request = ProxyRequest.newBuilder().setEvent(CONNECT).build().toProtoBuf()
         writeRequest(request)
         val response = readResponse()
         sessionId = response.meta.session
@@ -38,7 +43,10 @@ class ProxyClient {
     }
 
     fun close(): Result<Response> {
-        val request = newRequestBuilder(CLOSE, sessionId).build()
+        val request = ProxyRequest.newBuilder()
+                .setSessionId(sessionId!!)
+                .setEvent(CLOSE)
+                .build().toProtoBuf()
         writeRequest(request)
         val response = readResponse()
         socket.close()
@@ -46,24 +54,33 @@ class ProxyClient {
     }
 
     fun createStmt(): Result<Response> {
-        val request = newRequestBuilder(CREATE_STMT, sessionId).build()
+        val request = ProxyRequest.newBuilder()
+                .setSessionId(sessionId!!)
+                .setEvent(CREATE_STMT)
+                .build().toProtoBuf()
         writeRequest(request)
         val response = readResponse()
         return Result(request, response)
     }
 
-    fun execUpdate(stmtId: String, sql: String): Result<Response> {
-        val builder = newRequestBuilder(SQL_UPDATE, sessionId, stmtId)
-        val request= builder.setSql(sql).build()
+    fun execUpdate(stmtId: Int, sql: String): Result<Response> {
+        val sqlRequest = ProxySQLRequest(stmtId, sql)
+        val request = ProxyRequest.newBuilder()
+                .setSessionId(sessionId!!)
+                .setEvent(SQL_UPDATE)
+                .setSubRequest(sqlRequest).build().toProtoBuf()
         writeRequest(request)
         val response = readResponse()
         return Result(request, response)
     }
 
-    fun execQuery(stmtId: String, sql: String): List<Result<MessageLite>> {
+    fun execQuery(stmtId: Int, sql: String): List<Result<MessageLite>> {
         val res = mutableListOf<Result<MessageLite>>()
-        val builder = newRequestBuilder(SQL_QUERY, sessionId, stmtId)
-        val request = builder.setSql(sql).build()
+        val sqlRequest = ProxySQLRequest(stmtId, sql)
+        val request = ProxyRequest.newBuilder()
+                .setSessionId(sessionId!!)
+                .setEvent(SQL_UPDATE)
+                .setSubRequest(sqlRequest).build().toProtoBuf()
         writeRequest(request)
         val response = readResponse()
         res.add(Result(request, response))

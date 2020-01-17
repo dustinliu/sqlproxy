@@ -1,18 +1,14 @@
 package sqlproxy.server
 
-import com.google.protobuf.Message
 import com.google.protobuf.MessageLite
-import com.google.protobuf.StringValue
-import com.google.protobuf.UInt32Value
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import sqlproxy.proto.Common.Meta
 import sqlproxy.proto.RequestOuterClass.Request
-import sqlproxy.proto.ResponseOuterClass
-import sqlproxy.proto.ResponseOuterClass.ColumnResponse
 import sqlproxy.proto.ResponseOuterClass.RowResponse
 import sqlproxy.proto.ResponseOuterClass.StmtResponse
-import java.sql.JDBCType
+import sqlproxy.proto.ResponseOuterClass.UpdateResponse
+import sqlproxy.protocol.ProxyRequest
 import java.sql.ResultSet
 
 typealias ProtobufAny = com.google.protobuf.Any
@@ -29,24 +25,24 @@ object ServiceProvider {
 }
 
 interface Service {
-    fun handleRequest(request: Request): ResponseHolder
+    fun handleRequest(request: ProxyRequest): ResponseHolder
 }
 
 abstract class AbstractFlowService : Service {
-    override fun handleRequest(request: Request): ResponseHolder =
+    override fun handleRequest(request: ProxyRequest): ResponseHolder =
         try {
             val flow = processRequest(request)
             FlowResponseHolder(flow)
         } catch (e: RuntimeException) {
             val flow = flow {
                 emit(newFailResponseBuilder(
-                        request.meta.id, request.meta.session, msg = e.message).build()
+                        request.requestId, request.sessionId, msg = e.message).build()
                 )
             }
             FlowResponseHolder(flow)
         }
 
-    abstract fun processRequest(request: Request): Flow<MessageLite>
+    abstract fun processRequest(request: ProxyRequest): Flow<MessageLite>
 }
 
 class ConnectService : AbstractFlowService() {
@@ -74,21 +70,23 @@ class CreateStmtService : AbstractFlowService() {
 
 class SQLUpdateService : AbstractFlowService() {
     override fun processRequest(request: Request) = flow {
-        val stmt = SessionFactory.getSession(request.meta.session).getStmt(request.meta.stmt)
-        val count = stmt.executeUpdate(request.sql)
+        val stmt = SessionFactory.getSession(request.meta.session).getStmt(request.sqlRequest.stmt)
+        val count = stmt.executeUpdate(request.sqlRequest.sql)
         val builder = newSuccessResponseBuilder(
-                request.meta.id, request.meta.session, request.meta.stmt)
-        emit(builder.setUpdateCount(count).build())
+                request.meta.id, request.meta.session)
+        val updateResponse = UpdateResponse.newBuilder()
+                .setStmt(request.sqlRequest.stmt)
+                .setUpdateCount(count).build()
+        emit(builder.setUpdateResponse(updateResponse).build())
     }
 }
 
-class SQLQueryService : AbstractFlowService() {
+abstract class AbstractQueryService : AbstractFlowService() {
     override fun processRequest(request: Request): Flow<MessageLite> = flow {
-        val stmt = SessionFactory.getSession(request.meta.session).getStmt(request.meta.stmt)
-        val resultSet = stmt.executeQuery(request.sql)
+        val resultSet = getResultSet(request)
         val resultMeta = resultSet.metaData
         val builder = newSuccessResponseBuilder(
-                request.meta.id, request.meta.session, request.meta.stmt)
+                request.meta.id, request.meta.session)
         builder.queryResponse = makeQueryResponse(resultMeta)
         emit(builder.build())
 
@@ -97,5 +95,14 @@ class SQLQueryService : AbstractFlowService() {
             emit(makeRowResponseBuilder(resultSet).setMeta(meta).setHasData(true).build())
         }
         emit(RowResponse.newBuilder().setMeta(meta).setHasData(false).build())
+    }
+
+    abstract fun getResultSet(request: Request): ResultSet
+}
+
+class SQLQueryService : AbstractQueryService() {
+    override fun getResultSet(request: Request): ResultSet {
+        val stmt = SessionFactory.getSession(request.meta.session).getStmt(request.sqlRequest.stmt)
+        return stmt.executeQuery(request.sqlRequest.sql)
     }
 }

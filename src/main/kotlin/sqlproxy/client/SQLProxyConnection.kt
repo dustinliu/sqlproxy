@@ -16,7 +16,7 @@ class SQLProxyConnection(url: String): Connection {
     }
 
     private val socket = Socket()
-    private var sessionId: String
+    private var sessionId: Long
     private var isClosed = false
 
     init {
@@ -34,7 +34,7 @@ class SQLProxyConnection(url: String): Connection {
 
         val response = ResponseOuterClass.Response.parseDelimitedFrom(socket.getInputStream())
         if (response.meta.session == null) {
-            throw SQLException("connec failed, session id is null")
+            throw SQLException("connect failed, session id is null")
         }
 
         if (response.status.code != ResponseOuterClass.Status.StatusCode.SUCCESS) {

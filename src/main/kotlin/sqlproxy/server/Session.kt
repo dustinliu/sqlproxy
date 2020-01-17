@@ -1,12 +1,10 @@
 package sqlproxy.server
 
-import org.kodein.di.generic.instance
-import sqlproxy.server.DataSourceFactory.dataSource
 import java.sql.Connection
 import java.sql.Statement
-import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
-import javax.sql.DataSource
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 
 class Session {
     enum class Status {
@@ -14,20 +12,26 @@ class Session {
         CLOSED
     }
 
+    companion object {
+        private val atomicId = AtomicLong(1)
+        private fun generateId() = atomicId.getAndIncrement()
+    }
+
+    private val stmtIdHolder: AtomicInteger = AtomicInteger(1)
     var status: Status = Status.CONNECTED
-    val id = UUID.randomUUID().toString()
+    val id = generateId()
     val created = System.currentTimeMillis()
 
     private val connection: Connection = DataSourceFactory.dataSource.connection
-    private val stmtMap = mutableMapOf<String, Statement>()
+    private val stmtMap = mutableMapOf<Int, Statement>()
 
-    fun createStmt(): String {
-        val id = UUID.randomUUID().toString()
+    fun createStmt(): Int {
+        val id = stmtIdHolder.getAndIncrement()
         stmtMap[id] = connection.createStatement()
         return id
     }
 
-    fun getStmt(id: String) = stmtMap.getValue(id)
+    fun getStmt(id: Int) = stmtMap.getValue(id)
 
     fun close() {
         stmtMap.forEach { (_, stmt) -> stmt.close() }
@@ -37,16 +41,16 @@ class Session {
 }
 
 object SessionFactory {
-    private val session_pool = ConcurrentHashMap<String, Session>()
+    private val session_pool = ConcurrentHashMap<Long, Session>()
 
     fun newSession() = Session().also { session_pool[it.id] = it }
 
-    fun getSession(session_id: String) = session_pool.getValue(session_id)
+    fun getSession(sessionId: Long) = session_pool.getValue(sessionId)
 
-    fun closeSession(session_id: String) {
-        val session = getSession(session_id)
+    fun closeSession(sessionId: Long) {
+        val session = getSession(sessionId)
         session.close()
-        session_pool.remove(session_id)
+        session_pool.remove(sessionId)
     }
 
     fun resetAll() {

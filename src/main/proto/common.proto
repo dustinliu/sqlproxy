@@ -1,9 +1,11 @@
 syntax = "proto3";
 option java_package = "sqlproxy.proto";
 
-
 message Meta {
-    string id = 1;
-    string session = 2;
-    string stmt = 3;
+    uint64 id = 1;
+    uint64 session = 2;
+}
+
+message Statement {
+    uint32 id = 1;
 }
