@@ -13,18 +13,9 @@ message StmtRequest {
 }
 
 message Request {
-    enum Event {
-        UNKNOWN = 0;
-        CONNECT = 1;
-        CLOSE = 2;
-        CREATE_STMT = 3;
-        SQL_UPDATE = 4;
-        SQL_QUERY = 5;
-        STMT_CLOSE = 6;
-    }
 
     Meta meta = 1;
-    Event event = 2;
+    uint32 event = 2;
 
     oneof query {
         SQLRequest sqlRequest = 3;

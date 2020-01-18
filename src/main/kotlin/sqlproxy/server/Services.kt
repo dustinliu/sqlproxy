@@ -3,11 +3,7 @@ package sqlproxy.server
 import com.google.protobuf.MessageLite
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
-import sqlproxy.proto.Common.Meta
 import sqlproxy.proto.RequestOuterClass.Request
-import sqlproxy.proto.ResponseOuterClass.RowResponse
-import sqlproxy.proto.ResponseOuterClass.StmtResponse
-import sqlproxy.proto.ResponseOuterClass.UpdateResponse
 import sqlproxy.protocol.ProxyRequest
 import java.sql.ResultSet
 
@@ -46,21 +42,21 @@ abstract class AbstractFlowService : Service {
 }
 
 class ConnectService : AbstractFlowService() {
-    override fun processRequest(request: Request) = flow {
+    override fun processRequest(request: ProxyRequest) = flow {
         val sessionId = SessionFactory.newSession().id
-        emit(newSuccessResponseBuilder(request.meta.id, sessionId).build())
+        emit(newSuccessResponseBuilder(request.requestId, sessionId).build())
     }
 }
 
 class CloseService : AbstractFlowService() {
-    override fun processRequest(request: Request) = flow {
-        SessionFactory.closeSession(request.meta.session)
-        emit(newSuccessResponseBuilder(request.meta.id, request.meta.session).build())
+    override fun processRequest(request: ProxyRequest) = flow {
+        SessionFactory.closeSession(request.sessionId)
+        emit(newSuccessResponseBuilder(request.requestId, request.sessionId).build())
     }
 }
 
 class CreateStmtService : AbstractFlowService() {
-    override fun processRequest(request: Request) = flow {
+    override fun processRequest(request: ProxyRequest) = flow {
         val session = SessionFactory.getSession(request.meta.session)
         val stmtResponse = StmtResponse.newBuilder().setId(session.createStmt()).build()
         val builder = newSuccessResponseBuilder(request.meta.id, request.meta.session)

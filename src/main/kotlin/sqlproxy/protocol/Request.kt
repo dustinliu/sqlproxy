@@ -8,9 +8,9 @@ import sqlproxy.proto.RequestOuterClass.Request.Event
 import sqlproxy.proto.RequestOuterClass.SQLRequest
 import java.util.concurrent.atomic.AtomicLong
 
-class ProxyRequest<T: SubRequest> private constructor(meta: Meta,
+class ProxyRequest private constructor(meta: Meta,
                                        val event: Event?,
-                                       val subRequest: T? = null)
+                                       val subRequest: SubRequest? = null)
     : PrimaryMessage(meta) {
 
     constructor(request: Request) : this(
@@ -55,7 +55,7 @@ class ProxyRequest<T: SubRequest> private constructor(meta: Meta,
 }
 
 
-sealed class SubRequest: SubMessage
+sealed class SubRequest: ProxyMessage
 
 class ProxySQLRequest constructor(stmtId: Int, val sql: String): SubRequest() {
     private val stmt: Statement = Statement.newBuilder().setId(stmtId).build()
