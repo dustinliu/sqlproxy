@@ -2,10 +2,19 @@ syntax = "proto3";
 option java_package = "sqlproxy.proto";
 
 message Meta {
-    uint64 id = 1;
-    uint64 session = 2;
+    uint64 requestId = 1;
+    uint64 sessionId = 2;
 }
 
 message Statement {
+    enum Type {
+        STATEMENT = 0;
+    }
+
+    uint32 id = 1;
+    Type type = 2;
+}
+
+message ResultSet {
     uint32 id = 1;
 }

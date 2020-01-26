@@ -1,20 +1,29 @@
 package sqlproxy.server
 
-import com.google.protobuf.MessageLite
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import sqlproxy.proto.Common.Statement.Type.STATEMENT
 import sqlproxy.proto.RequestOuterClass.Request
+import sqlproxy.protocol.FlowResponseHolder
+import sqlproxy.protocol.ProxyColumnResponse
+import sqlproxy.protocol.ProxyQueryResponse
 import sqlproxy.protocol.ProxyRequest
+import sqlproxy.protocol.ProxyResponse
+import sqlproxy.protocol.ProxySQLRequest
+import sqlproxy.protocol.ProxyStatement
+import sqlproxy.protocol.ProxyStmtResponse
+import sqlproxy.protocol.ProxyUpdateResponse
+import sqlproxy.protocol.ResponseHolder
 import java.sql.ResultSet
+import java.sql.SQLException
 
 typealias ProtobufAny = com.google.protobuf.Any
 
 object ServiceProvider {
     fun getService(event: Request.Event) = when (event) {
-        Request.Event.CONNECT -> { ConnectService() }
-        Request.Event.CLOSE -> { CloseService() }
-        Request.Event.CREATE_STMT -> { CreateStmtService() }
-        Request.Event.SQL_UPDATE -> { SQLUpdateService() }
+        Request.Event.CONNECT -> ConnectService()
+        Request.Event.CLOSE -> CloseService()
+        Request.Event.CREATE_STMT -> CreateStmtService()
+        Request.Event.SQL_UPDATE -> SQLUpdateService()
         Request.Event.SQL_QUERY -> { SQLQueryService() }
         else -> throw IllegalArgumentException("unknown event")
     }
@@ -25,80 +34,79 @@ interface Service {
 }
 
 abstract class AbstractFlowService : Service {
-    override fun handleRequest(request: ProxyRequest): ResponseHolder =
-        try {
-            val flow = processRequest(request)
-            FlowResponseHolder(flow)
-        } catch (e: RuntimeException) {
-            val flow = flow {
-                emit(newFailResponseBuilder(
-                        request.requestId, request.sessionId, msg = e.message).build()
-                )
-            }
-            FlowResponseHolder(flow)
+    override fun handleRequest(request: ProxyRequest): ResponseHolder {
+        val flow = try {
+            flow { emit(processRequest(request)) }
+        } catch (e: SQLException) {
+            flow { emit(ProxyResponse.failedResponse(request, e.errorCode, e.message)) }
         }
+        return FlowResponseHolder(flow)
+    }
 
-    abstract fun processRequest(request: ProxyRequest): Flow<MessageLite>
+    abstract fun processRequest(request: ProxyRequest): ProxyResponse
 }
 
 class ConnectService : AbstractFlowService() {
-    override fun processRequest(request: ProxyRequest) = flow {
+    override fun processRequest(request: ProxyRequest): ProxyResponse {
         val sessionId = SessionFactory.newSession().id
-        emit(newSuccessResponseBuilder(request.requestId, sessionId).build())
+        return ProxyResponse.successResponse(request, sessionId = sessionId)
     }
 }
 
 class CloseService : AbstractFlowService() {
-    override fun processRequest(request: ProxyRequest) = flow {
+    override fun processRequest(request: ProxyRequest): ProxyResponse {
         SessionFactory.closeSession(request.sessionId)
-        emit(newSuccessResponseBuilder(request.requestId, request.sessionId).build())
+        return ProxyResponse.successResponse(request)
     }
 }
 
 class CreateStmtService : AbstractFlowService() {
-    override fun processRequest(request: ProxyRequest) = flow {
-        val session = SessionFactory.getSession(request.meta.session)
-        val stmtResponse = StmtResponse.newBuilder().setId(session.createStmt()).build()
-        val builder = newSuccessResponseBuilder(request.meta.id, request.meta.session)
-        emit(builder.setStmt(stmtResponse).build())
+    override fun processRequest(request: ProxyRequest): ProxyResponse {
+        val session = SessionFactory.getSession(request.sessionId)
+        val stmtResponse =
+                ProxyStmtResponse(ProxyStatement(session.createStmt(), STATEMENT))
+        return ProxyResponse.successResponse(request, stmtResponse)
     }
 }
 
 class SQLUpdateService : AbstractFlowService() {
-    override fun processRequest(request: Request) = flow {
-        val stmt = SessionFactory.getSession(request.meta.session).getStmt(request.sqlRequest.stmt)
-        val count = stmt.executeUpdate(request.sqlRequest.sql)
-        val builder = newSuccessResponseBuilder(
-                request.meta.id, request.meta.session)
-        val updateResponse = UpdateResponse.newBuilder()
-                .setStmt(request.sqlRequest.stmt)
-                .setUpdateCount(count).build()
-        emit(builder.setUpdateResponse(updateResponse).build())
+    override fun processRequest(request: ProxyRequest): ProxyResponse {
+        val sqlRequest = request.getSubRequestByType<ProxySQLRequest>()
+        val stmt = SessionFactory.getSession(request.sessionId).getStmt(sqlRequest.statement.id)
+        val count = stmt.executeUpdate(sqlRequest.sql)
+        val updateResponse =
+                ProxyUpdateResponse(sqlRequest.statement, count)
+        return ProxyResponse.successResponse(request, updateResponse)
     }
 }
 
 abstract class AbstractQueryService : AbstractFlowService() {
-    override fun processRequest(request: Request): Flow<MessageLite> = flow {
+    override fun processRequest(request: ProxyRequest): ProxyResponse {
+        val sqlRequest = request.getSubRequestByType<ProxySQLRequest>()
         val resultSet = getResultSet(request)
-        val resultMeta = resultSet.metaData
-        val builder = newSuccessResponseBuilder(
-                request.meta.id, request.meta.session)
-        builder.queryResponse = makeQueryResponse(resultMeta)
-        emit(builder.build())
-
-        val meta = Meta.newBuilder().setId(request.meta.id).setSession(request.meta.session)
-        while (resultSet.next()) {
-            emit(makeRowResponseBuilder(resultSet).setMeta(meta).setHasData(true).build())
-        }
-        emit(RowResponse.newBuilder().setMeta(meta).setHasData(false).build())
+        val queryResponse =  ProxyQueryResponse(
+                sqlRequest.statement,
+                resultSet.metaData.columnCount,
+                makeColumnResponse(resultSet))
+        return ProxyResponse.successResponse(request, queryResponse)
     }
 
-    abstract fun getResultSet(request: Request): ResultSet
+    private fun makeColumnResponse(resultSet: ResultSet): List<ProxyColumnResponse> {
+        val meta = resultSet.metaData
+        val metas = mutableListOf<ProxyColumnResponse>()
+        for (i in 1 until meta.columnCount+1) {
+            metas.add(ProxyColumnResponse(i, meta.getColumnName(i), meta.getColumnType(i)))
+        }
+        return metas
+    }
+
+    abstract fun getResultSet(request: ProxyRequest): ResultSet
 }
 
 class SQLQueryService : AbstractQueryService() {
-    override fun getResultSet(request: Request): ResultSet {
-        val stmt = SessionFactory.getSession(request.meta.session).getStmt(request.sqlRequest.stmt)
-        return stmt.executeQuery(request.sqlRequest.sql)
+    override fun getResultSet(request: ProxyRequest): ResultSet {
+        val sqlRequest = request.getSubRequestByType<ProxySQLRequest>()
+        val stmt = SessionFactory.getSession(request.sessionId).getStmt(sqlRequest.stmtId)
+        return stmt.executeQuery(sqlRequest.sql)
     }
 }

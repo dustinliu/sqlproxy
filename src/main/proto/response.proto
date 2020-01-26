@@ -12,11 +12,8 @@ message Status {
     }
 
     StatusCode code = 1;
-    string message = 2;
-}
-
-message StmtResponse {
-    uint32 id = 1;
+    int32 appCode = 2;
+    string message = 3;
 }
 
 message ColumnResponse {
@@ -26,19 +23,23 @@ message ColumnResponse {
     google.protobuf.Any value = 4;
 }
 
+message StmtResponse {
+    Statement stmt = 1;
+}
+
 message QueryResponse {
-    string stmt = 1;
+    Statement stmt = 1;
     uint32 numOfColumn = 2;
-    repeated ColumnResponse columnMeta= 3;
+    repeated ColumnResponse columnMeta = 3;
 }
 
 message UpdateResponse {
-    uint32 stmt = 1;
+    Statement stmt = 1;
     int32 updateCount = 2;
 }
 
 message RowResponse {
-    Meta meta = 1;
+    Statement stmt = 1;
     bool hasData = 2;
     repeated ColumnResponse column = 3;
 }
@@ -48,8 +49,9 @@ message Response {
     Status status = 2;
 
     oneof result {
-        StmtResponse stmt = 3;
+        StmtResponse StmtResponse = 3;
         UpdateResponse updateResponse = 4;
         QueryResponse queryResponse = 5;
+        RowResponse rowResponse = 6;
     }
 }

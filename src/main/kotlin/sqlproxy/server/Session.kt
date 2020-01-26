@@ -13,7 +13,7 @@ class Session {
     }
 
     companion object {
-        private val atomicId = AtomicLong(1)
+        private val atomicId = AtomicLong(0)
         private fun generateId() = atomicId.getAndIncrement()
     }
 
@@ -26,7 +26,7 @@ class Session {
     private val stmtMap = mutableMapOf<Int, Statement>()
 
     fun createStmt(): Int {
-        val id = stmtIdHolder.getAndIncrement()
+        val id = stmtIdHolder.incrementAndGet()
         stmtMap[id] = connection.createStatement()
         return id
     }

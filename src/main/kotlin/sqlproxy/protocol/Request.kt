@@ -1,68 +1,66 @@
 package sqlproxy.protocol
 
-import com.google.protobuf.GeneratedMessageV3
 import sqlproxy.proto.Common.Meta
 import sqlproxy.proto.Common.Statement
 import sqlproxy.proto.RequestOuterClass.Request
 import sqlproxy.proto.RequestOuterClass.Request.Event
+import sqlproxy.proto.RequestOuterClass.Request.QueryCase.NEXTREQUEST
+import sqlproxy.proto.RequestOuterClass.Request.QueryCase.QUERY_NOT_SET
+import sqlproxy.proto.RequestOuterClass.Request.QueryCase.SQLREQUEST
 import sqlproxy.proto.RequestOuterClass.SQLRequest
 import java.util.concurrent.atomic.AtomicLong
 
-class ProxyRequest private constructor(meta: Meta,
-                                       val event: Event?,
-                                       val subRequest: SubRequest? = null)
-    : PrimaryMessage(meta) {
+class ProxyRequest(private val request: Request): PrimaryMessage {
+    override val requestId: Long = request.meta.requestId
+    override val sessionId: Long = request.meta.sessionId
+    val event: Event = request.event
+    val subRequest: SubRequest? = when (request.queryCase) {
+        SQLREQUEST -> ProxySQLRequest.fromProtoBuf(request.sqlRequest)
+        NEXTREQUEST -> TODO()
+        null, QUERY_NOT_SET -> null
+    }
 
-    constructor(request: Request) : this(
-            request.meta,
-            request.event,
-            when {
-                request.hasSqlRequest() -> ProxySQLRequest(request.sqlRequest)
-                else -> null
-            }
-    )
+    inline fun <reified T: SubRequest> getSubRequestByType(): T =
+            if (subRequest is T) subRequest
+            else throw IllegalArgumentException("sub request is not a instance of ${T::class.java}")
 
     companion object {
-        fun newBuilder() = Builder()
-    }
-
-    override fun toProtoBuf(): GeneratedMessageV3 {
-        var builder = Request.newBuilder().setMeta(meta).setEvent(event)
-        builder = when (subRequest) {
-            is ProxySQLRequest -> builder.setSqlRequest(subRequest.toProtoBuf())
-            null -> builder
+        private val atomicId = AtomicLong(0)
+        fun newInstance(event: Event, sessionId: Long? = null,
+                        subRequest: SubRequest? = null): ProxyRequest {
+            val meta = Meta.newBuilder().setRequestId(atomicId.getAndIncrement()).apply {
+                sessionId?.let { setSessionId(sessionId) }
+            }.build()
+            val request =  Request.newBuilder().setMeta(meta).setEvent(event).apply {
+                when (subRequest) {
+                    is ProxySQLRequest-> sqlRequest = subRequest.toProtoBuf()
+                }
+            }.build()
+            return ProxyRequest(request)
         }
-        return builder.build()
     }
 
-    class Builder {
-        private val metaBuilder = Meta.newBuilder()
-        private var event: Event? = null
-        private var subRequest: SubRequest? = null
-
-        fun setSessionId(sessionId: Long) = this.also { metaBuilder.session = sessionId }
-
-        fun setEvent(e: Event) = this.apply { event = e }
-
-        fun setSubRequest(request: SubRequest) = this.apply { subRequest = request }
-
-        fun build() {
-            ProxyRequest(metaBuilder.build(), event, subRequest)
-        }
-
-        companion object { private val atomicIdHolder = AtomicLong(1) }
-    }
+    override fun toProtoBuf() = request
 }
 
 
 sealed class SubRequest: ProxyMessage
 
-class ProxySQLRequest constructor(stmtId: Int, val sql: String): SubRequest() {
-    private val stmt: Statement = Statement.newBuilder().setId(stmtId).build()
-    val stmtId = stmt.id
+class ProxySQLRequest(val statement: ProxyStatement, val sql: String): SubRequest() {
+    constructor(stmtId: Int, stmtType: Statement.Type, sql: String)
+            : this(ProxyStatement(stmtId, stmtType), sql)
 
-    constructor(request: SQLRequest) : this(request.stmt.id, request.sql)
+    val stmtId = statement.id
 
-    override fun toProtoBuf(): SQLRequest =
-            SQLRequest.newBuilder().setStmt(stmt).setSql(sql).build()
+    private val request: SQLRequest by lazy {
+        SQLRequest.newBuilder().setStmt(statement.toProtoBuf()).setSql(sql).build()
+    }
+
+    override fun toProtoBuf() = request
+
+    companion object {
+        fun fromProtoBuf(request: SQLRequest) =
+                ProxySQLRequest(ProxyStatement.fromProtoBuf(request.stmt), request.sql)
+    }
 }
+

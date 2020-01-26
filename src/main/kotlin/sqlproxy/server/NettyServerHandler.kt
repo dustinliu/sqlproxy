@@ -14,8 +14,9 @@ class NettyServerHandler: ChannelInboundHandlerAdapter() {
 
     override fun channelRead(ctx: ChannelHandlerContext, msg: Any) {
         if (msg is Request) {
-            val responseHolder = ServiceProvider.getService(msg.event).handleRequest(ProxyRequest(msg))
-            responseHolder.write { ctx.write(it) }
+            val responseHolder = ServiceProvider.getService(msg.event)
+                    .handleRequest(ProxyRequest(msg))
+            responseHolder.write { ctx.write(it.toProtoBuf()) }
             ctx.flush()
             logger.trace { "netty channel flush done"}
         }
