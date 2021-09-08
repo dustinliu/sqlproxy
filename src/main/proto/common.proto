@@ -2,7 +2,7 @@ syntax = "proto3";
 option java_package = "sqlproxy.proto";
 
 message Meta {
-    uint64 requestId = 1;
+    uint64 messageId = 1;
     uint64 sessionId = 2;
 }
 

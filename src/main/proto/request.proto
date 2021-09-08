@@ -3,32 +3,13 @@ option java_package = "sqlproxy.proto";
 
 import "common.proto";
 
-message SQLRequest {
-    Statement stmt = 1;
-    string sql = 2;
-}
-
-message NextRequest {
-    Statement stmt = 1;
-    ResultSet rs = 2;
-}
-
 message Request {
-    enum Event {
+    enum Type {
         UNKNOWN = 0;
         CONNECT = 1;
         CLOSE = 2;
-        CREATE_STMT = 3;
-        SQL_UPDATE = 4;
-        SQL_QUERY = 5;
-        RESULT_NEXT = 6;
     }
 
-    Meta meta = 1;
-    Event event = 2;
-
-    oneof query {
-        SQLRequest sqlRequest = 3;
-        NextRequest nextRequest = 5;
-    }
+    Type event = 1;
+    Meta meta = 2;
 }

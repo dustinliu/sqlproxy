@@ -12,6 +12,7 @@ import io.netty.handler.codec.protobuf.ProtobufDecoder
 import io.netty.handler.codec.protobuf.ProtobufEncoder
 import io.netty.handler.codec.protobuf.ProtobufVarint32FrameDecoder
 import io.netty.handler.codec.protobuf.ProtobufVarint32LengthFieldPrepender
+import io.netty.util.concurrent.DefaultEventExecutorGroup
 import mu.KotlinLogging
 import org.apache.commons.lang3.SystemUtils
 import sqlproxy.proto.RequestOuterClass
@@ -50,12 +51,12 @@ class SQLProxy {
             else NioServerSocketChannel::class.java
         )
         b.childHandler(ProtoServerInitializer())
-        b.option<Int>(ChannelOption.SO_BACKLOG, 1024)
-        b.childOption<Boolean>(ChannelOption.SO_KEEPALIVE, true)
+        b.option(ChannelOption.SO_BACKLOG, 1024)
+        b.childOption(ChannelOption.SO_KEEPALIVE, true)
 
         val f = b.bind(8888).sync()
         startCountDown.countDown()
-        logger.info("sqlproxy started")
+        logger.info {"sqlproxy started"}
         f.channel().closeFuture().sync()
     }
 
@@ -66,34 +67,31 @@ class SQLProxy {
     fun stop() {
         workerGroup.shutdownGracefully()
         bossGroup.shutdownGracefully()
-        logger.info("sqlproxy shtdown")
+        logger.info {"sqlproxy shutdown"}
         stopCountDown.countDown()
     }
 
     fun awaitStop() {
         stopCountDown.await()
     }
-
-    fun resetSessions() {
-        SessionFactory.resetAll()
-    }
-
-    internal fun getSessions() = SessionFactory.getSessions()
 }
 
 class ProtoServerInitializer : ChannelInitializer<SocketChannel>() {
+    companion object {
+        val eventExecutorGroup = DefaultEventExecutorGroup(200, SQLProxyThreadFactory("SQL_Executor"))
+    }
+
     override fun initChannel(ch: SocketChannel) {
         val pipeline = ch.pipeline()
         pipeline.addLast(ProtobufVarint32FrameDecoder())
         pipeline.addLast(ProtobufDecoder(RequestOuterClass.Request.getDefaultInstance()))
         pipeline.addLast(ProtobufVarint32LengthFieldPrepender())
         pipeline.addLast(ProtobufEncoder())
-        pipeline.addLast(NettyServerHandler())
+        pipeline.addLast(eventExecutorGroup, SQLProxyHandler())
     }
 }
 
 fun main() {
     val proxy = SQLProxy()
-    kodein = defaultKodein
     Thread { proxy.start() }.start()
 }

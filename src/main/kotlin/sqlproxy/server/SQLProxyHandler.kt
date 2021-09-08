@@ -4,19 +4,18 @@ import io.netty.channel.ChannelHandlerContext
 import io.netty.channel.ChannelInboundHandlerAdapter
 import mu.KotlinLogging
 import sqlproxy.proto.RequestOuterClass.Request
-import sqlproxy.protocol.ProxyRequest
 
 
-class NettyServerHandler: ChannelInboundHandlerAdapter() {
+class SQLProxyHandler: ChannelInboundHandlerAdapter() {
     companion object {
         private val logger = KotlinLogging.logger {}
     }
 
     override fun channelRead(ctx: ChannelHandlerContext, msg: Any) {
         if (msg is Request) {
-            val responseHolder = ServiceProvider.getService(msg.event)
-                    .handleRequest(ProxyRequest(msg))
-            responseHolder.write { ctx.write(it.toProtoBuf()) }
+//            val responseHolder = ServiceProvider.getService(msg.event)
+//                    .handleRequest(ProxyRequest(msg))
+//            responseHolder.write { ctx.write(it.toProtoBuf()) }
             ctx.flush()
             logger.trace { "netty channel flush done"}
         }
@@ -25,12 +24,12 @@ class NettyServerHandler: ChannelInboundHandlerAdapter() {
     }
 
     override fun channelActive(ctx: ChannelHandlerContext?) {
-        logger.trace("client ${ctx?.channel()?.remoteAddress()} connected")
+        logger.trace {"client ${ctx?.channel()?.remoteAddress()} connected"}
         super.channelActive(ctx)
     }
 
     override fun channelUnregistered(ctx: ChannelHandlerContext?) {
-        logger.trace("connection closed, client ${ctx?.channel()?.remoteAddress()}")
+        logger.trace {"connection closed, client ${ctx?.channel()?.remoteAddress()}"}
         super.channelUnregistered(ctx)
     }
 
