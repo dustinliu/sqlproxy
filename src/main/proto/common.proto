@@ -1,0 +1,19 @@
+syntax = "proto3";
+option java_package = "sqlproxy.proto";
+
+message Meta {
+  enum Type {
+    UNKNOWN = 0;
+    CONNECTION = 1;
+  }
+
+  uint64 requestId = 1;
+  Type type = 2;
+}
+
+enum ConnectionCommand {
+  UNKNOWN = 0;
+  INIT = 1;
+  CLOSE = 2;
+  VALID = 3;
+}

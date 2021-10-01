@@ -100,10 +100,6 @@ class ProtoServerInitializer : ChannelInitializer<SocketChannel>() {
     }
 }
 
-private fun initChannel(ch: Channel) {
-
-}
-
 fun main() {
     val proxy = SQLProxy()
     Thread { proxy.start() }.start()
