@@ -3,13 +3,16 @@ option java_package = "sqlproxy.proto";
 
 import "common.proto";
 
-message Request {
-    enum Type {
-        UNKNOWN = 0;
-        CONNECT = 1;
-        CLOSE = 2;
+message ConnectionRequest {
+    ConnectionCommand command = 1;
+    oneof body {
+        int32 validTimeout = 2;
     }
+}
 
-    Type event = 1;
-    Meta meta = 2;
+message ProtobufRequest {
+    Meta meta = 1;
+    oneof body {
+        ConnectionRequest connection = 2;
+    }
 }

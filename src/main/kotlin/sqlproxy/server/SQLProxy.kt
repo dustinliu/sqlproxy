@@ -1,6 +1,7 @@
 package sqlproxy.server
 
 import io.netty.bootstrap.ServerBootstrap
+import io.netty.channel.Channel
 import io.netty.channel.ChannelInitializer
 import io.netty.channel.ChannelOption
 import io.netty.channel.epoll.EpollEventLoopGroup
@@ -15,10 +16,12 @@ import io.netty.handler.codec.protobuf.ProtobufVarint32LengthFieldPrepender
 import io.netty.util.concurrent.DefaultEventExecutorGroup
 import mu.KotlinLogging
 import org.apache.commons.lang3.SystemUtils
-import sqlproxy.proto.RequestOuterClass
+import sqlproxy.proto.Request
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ThreadFactory
 import java.util.concurrent.atomic.AtomicInteger
+
+private val logger = KotlinLogging.logger {}
 
 class SQLProxyThreadFactory(private val name: String) : ThreadFactory{
     private var count = AtomicInteger()
@@ -29,10 +32,6 @@ class SQLProxyThreadFactory(private val name: String) : ThreadFactory{
 }
 
 class SQLProxy {
-    companion object {
-        val logger = KotlinLogging.logger {}
-    }
-
     private val bossGroup =
         if (SystemUtils.IS_OS_LINUX) EpollEventLoopGroup(0, SQLProxyThreadFactory("boss"))
         else NioEventLoopGroup(0, SQLProxyThreadFactory("boss"))
@@ -44,6 +43,7 @@ class SQLProxy {
     private val stopCountDown = CountDownLatch(1)
 
     fun start() {
+        logger.debug { SQLProxyConfig }
         val b = ServerBootstrap()
         b.group(bossGroup, workerGroup)
         b.channel(
@@ -54,7 +54,7 @@ class SQLProxy {
         b.option(ChannelOption.SO_BACKLOG, 1024)
         b.childOption(ChannelOption.SO_KEEPALIVE, true)
 
-        val f = b.bind(8888).sync()
+        val f = b.bind(SQLProxyConfig.server.address, SQLProxyConfig.server.port).sync()
         startCountDown.countDown()
         logger.info {"sqlproxy started"}
         f.channel().closeFuture().sync()
@@ -78,17 +78,30 @@ class SQLProxy {
 
 class ProtoServerInitializer : ChannelInitializer<SocketChannel>() {
     companion object {
-        val eventExecutorGroup = DefaultEventExecutorGroup(200, SQLProxyThreadFactory("SQL_Executor"))
+        private val eventExecutorGroup = DefaultEventExecutorGroup(
+            SQLProxyConfig.server.numOfServiceThread,
+            SQLProxyThreadFactory("service")
+        )
+
+        fun initPipeline(ch : Channel) {
+            val pipeline = ch.pipeline()
+            pipeline.addLast(ProtobufVarint32FrameDecoder())
+            pipeline.addLast(ProtobufDecoder(Request.ProtobufRequest.getDefaultInstance()))
+            pipeline.addLast(ServerDecoder())
+            pipeline.addLast(ProtobufVarint32LengthFieldPrepender())
+            pipeline.addLast(ProtobufEncoder())
+            pipeline.addLast(ServerEncoder())
+            pipeline.addLast(eventExecutorGroup, SQLProxyHandler())
+        }
     }
 
     override fun initChannel(ch: SocketChannel) {
-        val pipeline = ch.pipeline()
-        pipeline.addLast(ProtobufVarint32FrameDecoder())
-        pipeline.addLast(ProtobufDecoder(RequestOuterClass.Request.getDefaultInstance()))
-        pipeline.addLast(ProtobufVarint32LengthFieldPrepender())
-        pipeline.addLast(ProtobufEncoder())
-        pipeline.addLast(eventExecutorGroup, SQLProxyHandler())
+        initPipeline(ch)
     }
+}
+
+private fun initChannel(ch: Channel) {
+
 }
 
 fun main() {

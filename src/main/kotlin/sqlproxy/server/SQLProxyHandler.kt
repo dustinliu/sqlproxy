@@ -3,24 +3,23 @@ package sqlproxy.server
 import io.netty.channel.ChannelHandlerContext
 import io.netty.channel.ChannelInboundHandlerAdapter
 import mu.KotlinLogging
-import sqlproxy.proto.RequestOuterClass.Request
+import sqlproxy.protocol.serialize
+import sqlproxy.server.service.SQLProxyService
+import sqlproxy.server.service.ServerRequestService
 
+private val logger = KotlinLogging.logger {}
 
 class SQLProxyHandler: ChannelInboundHandlerAdapter() {
-    companion object {
-        private val logger = KotlinLogging.logger {}
-    }
+    val service = SQLProxyService()
 
     override fun channelRead(ctx: ChannelHandlerContext, msg: Any) {
-        if (msg is Request) {
-//            val responseHolder = ServiceProvider.getService(msg.event)
-//                    .handleRequest(ProxyRequest(msg))
-//            responseHolder.write { ctx.write(it.toProtoBuf()) }
-            ctx.flush()
-            logger.trace { "netty channel flush done"}
+        logger.trace {"message $msg received"}
+        require(msg is ServerRequestService) {
+            "unknown request, expect SQLProxyRequest, actual ${msg::class}"
         }
-        super.channelRead(ctx, msg)
-        logger.trace { "channelRead done" }
+        val response = service.invoke(msg)
+        ctx.writeAndFlush(response.serialize())
+        ctx.channel().metadata()
     }
 
     override fun channelActive(ctx: ChannelHandlerContext?) {
@@ -29,10 +28,19 @@ class SQLProxyHandler: ChannelInboundHandlerAdapter() {
     }
 
     override fun channelUnregistered(ctx: ChannelHandlerContext?) {
-        logger.trace {"connection closed, client ${ctx?.channel()?.remoteAddress()}"}
         super.channelUnregistered(ctx)
+        if (service.isActive()) {
+            logger.warn {
+                "client close connection unexpected, client ${ctx?.channel()?.remoteAddress()}"
+            }
+            service.finish()
+        }
+
+        logger.trace {"connection closed, client ${ctx?.channel()?.remoteAddress()}"}
+        ctx!!.close()
     }
 
+    //TODO: send error message but not close the channel
     override fun exceptionCaught(ctx: ChannelHandlerContext, cause: Throwable) {
         cause.printStackTrace()
         ctx.close()

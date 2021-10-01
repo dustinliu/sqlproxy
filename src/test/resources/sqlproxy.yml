@@ -1,0 +1,12 @@
+---
+env: dev
+
+server:
+    port: 8888
+    address: "127.0.0.1"
+    numOfServiceThread: 50
+
+database:
+    jdbcUrl: "jdbc:sqlite::memory:"
+    connection:
+        maxLifetime: 30m
